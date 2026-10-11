@@ -9,5 +9,15 @@ wheels/
 # Virtual environments
 .venv
 
-# uv artifacts
-*.lock
+# Tool caches
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.ropeproject/
+
+# Generated during the evaluation; must not be part of the repository
+data/output/
+
+# Local scratch files
+subject.txt
+en.subject.pdf
