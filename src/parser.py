@@ -1,112 +1,62 @@
-"""Parsing and validation of the project input files.
-
-The two input files are described by pydantic models.  The loaders return
-validated objects or raise InputError with a message suitable for the user.
-"""
-
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field
 
-
-class InputError(Exception):
-    """A user-facing problem with one of the input files."""
-
-
-class ParameterSpec(BaseModel):
-    """Description of a single function parameter."""
-
-    type: str
+FUNCTIONS: list[Any] = []
+PROMPTS: list[Any] = []
+FUNCTIONS_DICT: Dict[str, str] = {}
 
 
-class ReturnSpec(BaseModel):
-    """Description of a function return value."""
-
+class ValueSpec(BaseModel):
     type: str
 
 
 class FunctionDefinition(BaseModel):
-    """One function available to the model."""
-
     name: str
     description: str
-    parameters: dict[str, ParameterSpec] = Field(default_factory=dict)
-    returns: ReturnSpec
+    parameters: dict[str, ValueSpec] = Field(default_factory=dict)
+    returns: ValueSpec
 
 
 class Prompt(BaseModel):
-    """One natural language request to process."""
-
-    prompt: str
+    prompt: str = Field(min_length=1)
 
 
-def _read_json(path: Path) -> Any:
-    """Read a JSON document and report failures as InputError."""
+def parse(functions_definition: str, input: str, output: str) -> None:
     try:
-        with path.open(encoding="utf-8") as handle:
-            return json.load(handle)
-    except FileNotFoundError as exc:
-        raise InputError(f"file not found: {path}") from exc
-    except json.JSONDecodeError as exc:
-        raise InputError(f"invalid JSON in {path}: {exc}") from exc
-    except (OSError, UnicodeDecodeError) as exc:
-        raise InputError(f"cannot read {path}: {exc}") from exc
+        validate_function_definition(functions_definition)
+        validate_input(input)
+        validate_output(output)
+    except Exception as e:
+        raise e
 
 
-def load_functions(path: str | Path) -> list[FunctionDefinition]:
-    """Load and validate the function definitions file.
-
-    Args:
-        path: Location of the JSON file with function definitions.
-
-    Returns:
-        The validated definitions, in file order.
-
-    Raises:
-        InputError: If the file is missing, unreadable, or invalid.
-    """
+def validate_function_definition(path: str) -> None:
     file_path = Path(path)
-    data = _read_json(file_path)
+    with file_path.open(encoding="utf-8") as file:
+        data = json.load(file)
     if not isinstance(data, list):
-        raise InputError(f"{file_path}: expected a JSON array")
-    functions: list[FunctionDefinition] = []
-    for index, item in enumerate(data):
-        try:
-            functions.append(FunctionDefinition.model_validate(item))
-        except ValidationError as exc:
-            raise InputError(
-                f"{file_path}: invalid function at index {index}: {exc}"
-            ) from exc
-    names = [function.name for function in functions]
-    if len(names) != len(set(names)):
-        raise InputError(f"{file_path}: duplicate function names")
-    return functions
+        raise ValueError(f"{file_path}: expected a JSON array")
+    for entry in data:
+        FunctionDefinition.model_validate(entry)
+        FUNCTIONS.append(entry)
+        FUNCTIONS_DICT[entry["name"]] = entry
 
 
-def load_prompts(path: str | Path) -> list[Prompt]:
-    """Load and validate the prompts file.
-
-    Args:
-        path: Location of the JSON file with prompts.
-
-    Returns:
-        The validated prompts, in file order.
-
-    Raises:
-        InputError: If the file is missing, unreadable, or invalid.
-    """
+def validate_input(path: str) -> None:
     file_path = Path(path)
-    data = _read_json(file_path)
+    with open(file_path, encoding="utf-8") as file:
+        data = json.load(file)
     if not isinstance(data, list):
-        raise InputError(f"{file_path}: expected a JSON array")
-    prompts: list[Prompt] = []
-    for index, item in enumerate(data):
-        try:
-            prompts.append(Prompt.model_validate(item))
-        except ValidationError as exc:
-            raise InputError(
-                f"{file_path}: invalid prompt at index {index}: {exc}"
-            ) from exc
-    return prompts
+        raise ValueError(f"{file_path}: expected a JSON array")
+    for entry in data:
+        Prompt.model_validate(entry)
+        PROMPTS.append(entry)
+
+
+def validate_output(path: str) -> None:
+    file_path = Path(path)
+    if file_path.is_file() and file_path.stat().st_size > 0:
+        raise ValueError(f"{file_path}: has existing content")

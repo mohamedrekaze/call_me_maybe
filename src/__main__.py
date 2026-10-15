@@ -1,17 +1,10 @@
-"""Command line entry point for the call me maybe project."""
-
 import argparse
-import sys
 
-from .parser import InputError, load_functions, load_prompts
+from src import parser
+from src.constrained_decoding import run
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Create the command line argument parser.
-
-    Returns:
-        The parser with the three project options.
-    """
     parser = argparse.ArgumentParser(
         prog="python -m src",
         description="Translate prompts into function calls.",
@@ -37,23 +30,19 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main() -> int:
-    """Load the inputs and report a short summary.
-
-    Returns:
-        Process exit code: 0 on success, 1 on an input error.
-    """
+def main() -> None:
     args = build_parser().parse_args()
-    try:
-        functions = load_functions(args.functions_definition)
-        prompts = load_prompts(args.input)
-    except InputError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
-    print(f"loaded {len(functions)} function definitions")
-    print(f"loaded {len(prompts)} prompts")
-    return 0
+    parser.parse(
+        functions_definition=args.functions_definition,
+        input=args.input,
+        output=args.output,
+    )
+    run(args.output)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        main()
+    except Exception as e:
+        print(e)
+        exit()

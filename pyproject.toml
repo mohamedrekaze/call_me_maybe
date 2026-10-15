@@ -19,3 +19,8 @@ members = [
 
 [tool.uv.sources]
 llm-sdk = { workspace = true}
+
+# llm_sdk is provided as-is by the subject; do not type-check inside it.
+[[tool.mypy.overrides]]
+module = "llm_sdk"
+follow_imports = "skip"
