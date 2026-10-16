@@ -11,10 +11,10 @@ clean:
 	@find . -type d -name __pycache__ -not -path './.venv/*' -exec rm -fr {} +
 	@rm -fr .mypy_cache .ruff_cache .pytest_cache
 
-# llm_sdk is the package provided by the subject: exclude it from our lint.
+# llm_sdk and moulinette are provided tools: exclude them from our lint.
 lint:
-	@uv run flake8 . --exclude=.venv,__pycache__,llm_sdk
-	@uv run mypy . --exclude llm_sdk \
+	@uv run flake8 . --exclude=.venv,__pycache__,llm_sdk,moulinette
+	@uv run mypy . --exclude '(llm_sdk|moulinette)' \
 	--warn-return-any \
 	--warn-unused-ignores \
 	--ignore-missing-imports \
@@ -22,5 +22,5 @@ lint:
 	--check-untyped-defs
 
 lint-strict:
-	@uv run flake8 . --exclude=.venv,__pycache__,llm_sdk
-	@uv run mypy . --exclude llm_sdk --strict
+	@uv run flake8 . --exclude=.venv,__pycache__,llm_sdk,moulinette
+	@uv run mypy . --exclude '(llm_sdk|moulinette)' --strict

@@ -1,22 +1,9 @@
-"""Constrained decoding: always emit valid, schema-conforming JSON.
-
-The decoder walks a state machine built from the function definitions.
-At every step only tokens that keep the output on the path to a complete
-valid object are allowed (all other tokens are masked out), and the
-fixed structure is appended without asking the model.  The model is
-only consulted where a real choice exists: the function name and the
-argument values.
-
-``decode_function_call`` is the main flow; every step it uses is a
-small helper below it.
-"""
-
 import json
 from pathlib import Path
 from typing import Any
 
 from src.parser import FUNCTIONS, PROMPTS
-from src.runner import get_model_object, get_system_prompt
+from src.runner import DEFAULT_MODEL, get_model_object, get_system_prompt
 
 MAX_STEPS = 200
 MAX_NUMBER = 20
@@ -41,9 +28,6 @@ _NUMBER_TRANSITIONS: dict[str, dict[str, str]] = {
 }
 
 
-# --- vocabulary -----------------------------------------------------------
-
-
 def _byte_decoder() -> dict[str, int]:
     """Return the vocab character -> byte mapping of byte-level BPE."""
     direct = (
@@ -66,17 +50,20 @@ _BYTE_DECODER = _byte_decoder()
 
 
 def _load_vocab(model: Any) -> dict[int, str]:
-    """Return the vocabulary as token id -> text (byte exact)."""
-    with open(model.get_path_to_vocab_file(), encoding="utf-8") as handle:
-        vocab: dict[str, int] = json.load(handle)
+    """Return the vocabulary as token id -> text (byte exact).
+
+    Read tokenizer.json: every supported tokenizer exposes it through
+    get_path_to_tokenizer_file, unlike vocab.json, which some model
+    repositories replace with tokenizer.model.
+    """
+    with open(model.get_path_to_tokenizer_file(), encoding="utf-8") as handle:
+        data: dict[str, Any] = json.load(handle)
+    vocab: dict[str, int] = data["model"]["vocab"]
     tokens: dict[int, str] = {}
     for token, token_id in vocab.items():
         raw = bytes(_BYTE_DECODER[char] for char in token)
         tokens[token_id] = raw.decode("utf-8", errors="surrogateescape")
     return tokens
-
-
-# --- token classification -------------------------------------------------
 
 
 def _string_safe(text: str) -> bool:
@@ -108,9 +95,6 @@ def _number_done(text: str) -> bool:
     return _number_state(text) in NUMBER_DONE
 
 
-# --- precomputed tables ---------------------------------------------------
-
-
 def _build_tables(model: Any) -> dict[str, Any]:
     """Load the vocabulary and precompute the per-state token tables."""
     tokens = _load_vocab(model)
@@ -127,9 +111,6 @@ def _build_tables(model: Any) -> dict[str, Any]:
         "brace": [i for i, t in tokens.items() if t.startswith("}")],
         "name_masks": {},
     }
-
-
-# --- generation helpers ---------------------------------------------------
 
 
 def _pick(model: Any, ids: list[int], allowed: list[int]) -> int:
@@ -154,7 +135,9 @@ def _word_mask(
     ]
 
 
-def _name_mask(tables: dict[str, Any], prefix: str, names: list[str]) -> list[int]:
+def _name_mask(
+    tables: dict[str, Any], prefix: str, names: list[str]
+) -> list[int]:
     """Return (cached) tokens that keep *prefix* on the way to a name."""
     cache: dict[str, list[int]] = tables["name_masks"]
     if prefix not in cache:
@@ -182,7 +165,9 @@ def _choose_name(
 
 def _number_options(tables: dict[str, Any], text: str) -> list[int]:
     """Return the tokens that keep *text* a partial JSON number."""
-    return [i for i, t in tables["numbers"] if _number_state(text + t) is not None]
+    return [
+        i for i, t in tables["numbers"] if _number_state(text + t) is not None
+    ]
 
 
 def _generate_number(
@@ -226,7 +211,9 @@ def _generate_bool(model: Any, ids: list[int], tables: dict[str, Any]) -> str:
     raise ValueError("boolean value did not finish")
 
 
-def _generate_string(model: Any, ids: list[int], tables: dict[str, Any]) -> str:
+def _generate_string(
+    model: Any, ids: list[int], tables: dict[str, Any]
+) -> str:
     """Let the model generate one string value, quotes included."""
     tokens: dict[int, str] = tables["tokens"]
     _force(model, ids, '"')
@@ -258,9 +245,6 @@ def _generate_value(
     if kind == "boolean":
         return _generate_bool(model, ids, tables)
     return _generate_string(model, ids, tables)
-
-
-# --- main flow ------------------------------------------------------------
 
 
 def decode_function_call(
@@ -319,12 +303,12 @@ def _validate(question: str, answer: str) -> dict[str, Any]:
     }
 
 
-def run(output_path: str) -> None:
+def run(output_path: str, model_name: str = DEFAULT_MODEL) -> None:
     """Decode every prompt and write the results to *output_path*."""
     if not FUNCTIONS or not PROMPTS:
         raise ValueError("input files were not parsed")
     print("loading model...", flush=True)
-    model = get_model_object()
+    model = get_model_object(model_name)
     tables = _build_tables(model)
     print("vocabulary ready", flush=True)
     results: list[dict[str, Any]] = []

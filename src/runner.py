@@ -3,14 +3,20 @@ from typing import Any
 from src.parser import FUNCTIONS
 
 
-def get_model_object() -> Any:
+DEFAULT_MODEL = "Qwen/Qwen3-0.6B"
+SECONDARY_MODEL = "Qwen/Qwen3.5-0.8B"
+
+
+def get_model_object(model_name: str = DEFAULT_MODEL) -> Any:
     """Create the LLM object (imported here to keep startup fast)."""
     from llm_sdk import Small_LLM_Model
 
-    return Small_LLM_Model()
+    return Small_LLM_Model(model_name=model_name)
 
 
-THINKING_OFF = " thinking\n\n\n\n"
+# Exact no-think suffix rendered by the chat template.  Verified identical
+# for Qwen/Qwen3-0.6B and Qwen/Qwen3.5-0.8B: an empty thinking block.
+THINKING_OFF = "<think>\n\n</think>\n\n"
 
 
 def get_system_prompt(question: str = "", thinking_off: bool = True) -> str:
@@ -18,7 +24,7 @@ def get_system_prompt(question: str = "", thinking_off: bool = True) -> str:
 
     Returns the full prompt: system turn, user turn, and the assistant
     turn.  The empty thinking block (THINKING_OFF) is the exact suffix
-    from the model's own chat template; it disables reasoning mode.
+    rendered by the model's own chat template; it disables reasoning.
     """
     marker = THINKING_OFF if thinking_off else ""
     return (
