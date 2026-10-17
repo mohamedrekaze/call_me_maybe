@@ -4,6 +4,9 @@ install:
 run:
 	@uv run python -m src
 
+run-second:
+	@uv run python -m src --model Qwen/Qwen3.5-0.8B --output data/output/function_calls_qwen35.json
+
 debug:
 	@uv run python -m pdb -m src
 
